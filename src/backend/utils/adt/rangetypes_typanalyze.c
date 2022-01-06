@@ -56,6 +56,7 @@ range_typanalyze(PG_FUNCTION_ARGS)
 	stats->extra_data = typcache;
 	/* same as in std_typanalyze */
 	stats->minrows = 300 * attr->attstattarget;
+	
 
 	PG_RETURN_BOOL(true);
 }
@@ -214,6 +215,8 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		 * Generate a bounds histogram slot entry if there are at least two
 		 * values.
 		 */
+/******************************  Rifat Start ****************************************/		
+
 		if (non_empty_cnt >= 2)
 		{
 			/* Sort bound values */
@@ -260,11 +263,101 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 			}
 
 			stats->stakind[slot_idx] = STATISTIC_KIND_BOUNDS_HISTOGRAM;
-			stats->stavalues[slot_idx] = bound_hist_values;
+			stats->stavalues[slot_idx] = bound_hist_values; /*important*/
 			stats->numvalues[slot_idx] = num_hist;
 			slot_idx++;
 		}
+/************************** FREQUENCY HISTOGRAM started *************************/
+		/*STATISTIC_KIND_FREQUENCY_HISTOGRAM*/
 
+/*		if (non_empty_cnt >= 2)
+		{
+			Datum	   *boundfreq_hist_values;
+			Datum 		*freq_hist_values;
+			lengths = (float8 *) palloc(sizeof(float8) * samplerows);
+			boundfreq_hist_values = (Datum *) palloc(num_hist * sizeof(Datum));
+			freq_hist_values = (Datum *) palloc(num_hist * sizeof(Datum));
+
+			float8	   *lengths;
+			float8      length;
+			RangeBound min,
+						maximum;  
+			// get maximum and minimum values 
+			min.val=lowers[0].val;
+			maximum.val=uppers[0].val;
+			for (i=1;i<non_empty_cnt;i++)
+			{
+				if (lowers[i].val < min.val)
+				{
+					min.val=lowers[i].val;
+				}
+				if(uppers[i].val > maximum.val)
+				{
+					uppers[i].val > maximum.val;
+				}
+			}		
+			length = DatumGetFloat8(FunctionCall2Coll(&typcache->rng_subdiff_finfo,
+											typcache->rng_collation,
+											maximum.val, min.val));
+			delta = length / (num_hist - 1);
+
+
+			RangeBound value,old_value;
+			value.val=lowers[0].val;
+			
+			// get the counts for each histogram bins
+			int count=0;
+			for (i = 0; i < num_hist; i++)
+			{
+				boundfreq_hist_values[i] = value.val;
+				old_value.val=value.val;
+				value.val=value.val+delta;
+
+				for (int j=0;j<non_empty_cnt;j++)
+				{
+					if (((lowers[j].val>=old_value.val)&&(lowers[j].val<value.val))||((uppers[j].val>=old_value.val)&&(uppers[j].val<value.val))||(lowers[j].val<old_value.val)&&(uppers[j].val>value.val))
+					{
+						count++;
+					}
+				}
+                 freq_hist_values[i]=count;
+				
+				 printf("%d", DatumGetInt16(value.val));
+				 print("%d",count);
+				count=0;
+			}
+			
+			stats->stavalues[slot_idx] = boundfreq_hist_values; //important
+			stats->numvalues[slot_idx] = num_hist;
+
+			stats->stakind[slot_idx] = STATISTIC_KIND_BOUNDSFREQ_HISTOGRAM;
+			slot_idx++;
+			stats->stavalues[slot_idx] = freq_hist_values; //important
+			stats->numvalues[slot_idx] = num_hist;
+			stats->statypid[slot_idx] = INT4OID;
+			stats->statyplen[slot_idx] = sizeof(int);
+			stats->stakind[slot_idx] = STATISTIC_KIND_FREQUENCY_HISTOGRAM;
+			slot_idx++;
+		}
+
+
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/************************** FREQUENCY HISTOGRAM END******************/
 		/*
 		 * Generate a length histogram slot entry if there are at least two
 		 * values.
@@ -322,7 +415,7 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		}
 		stats->staop[slot_idx] = Float8LessOperator;
 		stats->stacoll[slot_idx] = InvalidOid;
-		stats->stavalues[slot_idx] = length_hist_values;
+		stats->stavalues[slot_idx] = length_hist_values; /*important*/
 		stats->numvalues[slot_idx] = num_hist;
 		stats->statypid[slot_idx] = FLOAT8OID;
 		stats->statyplen[slot_idx] = sizeof(float8);

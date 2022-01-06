@@ -3155,11 +3155,13 @@
   oprresult => 'bool', oprcom => '<(anyrange,anyrange)',
   oprnegate => '<=(anyrange,anyrange)', oprcode => 'range_gt',
   oprrest => 'rangesel', oprjoin => 'scalargtjoinsel' },
+
 { oid => '3888', oid_symbol => 'OID_RANGE_OVERLAP_OP', descr => 'overlaps',
   oprname => '&&', oprleft => 'anyrange', oprright => 'anyrange',
   oprresult => 'bool', oprcom => '&&(anyrange,anyrange)',
   oprcode => 'range_overlaps', oprrest => 'rangesel',
   oprjoin => 'areajoinsel' },
+
 { oid => '3889', oid_symbol => 'OID_RANGE_CONTAINS_ELEM_OP',
   descr => 'contains',
   oprname => '@>', oprleft => 'anyrange', oprright => 'anyelement',

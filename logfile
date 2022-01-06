@@ -1,0 +1,8 @@
+2021-11-28 20:35:29.616 CET [16296] FATAL:  data directory "/usr/local/pgsql/data" has wrong ownership
+2021-11-28 20:35:29.616 CET [16296] HINT:  The server must be started by the user that owns the data directory.
+2021-11-28 20:36:27.554 CET [16316] FATAL:  data directory "/usr/local/pgsql/data" has wrong ownership
+2021-11-28 20:36:27.554 CET [16316] HINT:  The server must be started by the user that owns the data directory.
+2021-11-28 20:39:32.596 CET [16350] FATAL:  data directory "/usr/local/pgsql/data" has wrong ownership
+2021-11-28 20:39:32.596 CET [16350] HINT:  The server must be started by the user that owns the data directory.
+2021-11-28 20:39:45.353 CET [16355] FATAL:  data directory "/usr/local/pgsql/data" has wrong ownership
+2021-11-28 20:39:45.353 CET [16355] HINT:  The server must be started by the user that owns the data directory.

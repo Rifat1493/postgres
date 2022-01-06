@@ -20,7 +20,15 @@
 
 #include "utils/builtins.h"
 #include "utils/geo_decls.h"
-
+#include "access/htup_details.h"
+#include "catalog/pg_statistic.h"
+#include "nodes/pg_list.h"
+#include "optimizer/pathnode.h"
+#include "optimizer/optimizer.h"
+#include "utils/lsyscache.h"
+#include "utils/typcache.h"
+#include "utils/selfuncs.h"
+#include "utils/rangetypes.h"
 
 /*
  *	Selectivity functions for geometric operators.  These are bogus -- unless
@@ -53,14 +61,198 @@ areasel(PG_FUNCTION_ARGS)
 
 Datum
 areajoinsel(PG_FUNCTION_ARGS)
+{   
+    
+  PlannerInfo *root = (PlannerInfo *) PG_GETARG_POINTER(0);
+    Oid         operator = PG_GETARG_OID(1);
+    List       *args = (List *) PG_GETARG_POINTER(2);
+    JoinType    jointype = (JoinType) PG_GETARG_INT16(3);
+    SpecialJoinInfo *sjinfo = (SpecialJoinInfo *) PG_GETARG_POINTER(4);
+    Oid         collation = PG_GET_COLLATION();
+
+    double      selec = 0.005;
+
+    VariableStatData vardata1;
+    VariableStatData vardata2;
+    Oid         opfuncoid;
+    AttStatsSlot sslot1;
+    AttStatsSlot sslot2;
+    int         nhist;
+    int         nhist1;
+    RangeBound *hist_lower1;
+    RangeBound *hist_upper1;
+    RangeBound *hist_lower2;
+    RangeBound *hist_upper2;
+    int         i;
+    Form_pg_statistic stats1 = NULL;
+    TypeCacheEntry *typcache = NULL;
+    Form_pg_statistic stats2 = NULL;
+    TypeCacheEntry *typcache1 = NULL;
+    bool        join_is_reversed;
+    bool        empty;
+    double      hist_selec;
+
+    get_join_variables(root, args, sjinfo,
+                       &vardata1, &vardata2, &join_is_reversed);
+
+    typcache = range_get_typcache(fcinfo, vardata1.vartype);
+    opfuncoid = get_opcode(operator);
+
+    memset(&sslot1, 0, sizeof(sslot1));
+
+    /* Can't use the histogram with insecure range support functions */
+    if (!statistic_proc_security_check(&vardata1, opfuncoid))
+        PG_RETURN_FLOAT8((float8) selec);
+
+    if (HeapTupleIsValid(vardata1.statsTuple))
+    {
+        stats1 = (Form_pg_statistic) GETSTRUCT(vardata1.statsTuple);
+        /* Try to get fraction of empty ranges */
+        if (!get_attstatsslot(&sslot1, vardata1.statsTuple,
+                             STATISTIC_KIND_BOUNDS_HISTOGRAM,
+                             InvalidOid, ATTSTATSSLOT_VALUES))
+        {
+            ReleaseVariableStats(vardata1);
+            ReleaseVariableStats(vardata2);
+            PG_RETURN_FLOAT8((float8) selec);
+        }
+    }
+
+    nhist = sslot1.nvalues;
+    hist_lower1 = (RangeBound *) palloc(sizeof(RangeBound) * nhist);
+    hist_upper1 = (RangeBound *) palloc(sizeof(RangeBound) * nhist);
+    for (i = 0; i < nhist; i++)
+    {
+        range_deserialize(typcache, DatumGetRangeTypeP(sslot1.values[i]),
+                          &hist_lower1[i], &hist_upper1[i], &empty);
+        /* The histogram should not contain any empty ranges */
+        if (empty)
+            elog(ERROR, "bounds histogram contains an empty range");
+    }
+
+
+/* for the 2nd variable */
+
+
+    typcache1 = range_get_typcache(fcinfo, vardata2.vartype);
+    opfuncoid = get_opcode(operator);
+
+    memset(&sslot2, 0, sizeof(sslot2));
+
+    /* Can't use the histogram with insecure range support functions */
+    if (!statistic_proc_security_check(&vardata2, opfuncoid))
+        PG_RETURN_FLOAT8((float8) selec);
+
+    if (HeapTupleIsValid(vardata2.statsTuple))
+    {
+        stats2 = (Form_pg_statistic) GETSTRUCT(vardata2.statsTuple);
+        /* Try to get fraction of empty ranges */
+        if (!get_attstatsslot(&sslot2, vardata2.statsTuple,
+                             STATISTIC_KIND_BOUNDS_HISTOGRAM,
+                             InvalidOid, ATTSTATSSLOT_VALUES))
+        {
+            ReleaseVariableStats(vardata1);
+            ReleaseVariableStats(vardata2);
+            PG_RETURN_FLOAT8((float8) selec);
+        }
+    }
+
+    nhist1 = sslot2.nvalues;
+    hist_lower2 = (RangeBound *) palloc(sizeof(RangeBound) * nhist1);
+    hist_upper2 = (RangeBound *) palloc(sizeof(RangeBound) * nhist1);
+    for (i = 0; i < nhist1; i++)
+    {
+        range_deserialize(typcache1, DatumGetRangeTypeP(sslot2.values[i]),
+                          &hist_lower2[i], &hist_upper2[i], &empty);
+        /* The histogram should not contain any empty ranges */
+        if (empty)
+            elog(ERROR, "bounds histogram contains an empty range");
+    }
+
+
+/*********************** start the algorithm *****************************/
+
+
+RangeBound maxlower;
+RangeBound minupper;
+int count=0;
+
+if (hist_lower1[0].val>=hist_lower2[0].val){
+    maxlower.val=hist_lower1[0].val;
+
+    for (i=0;i<nhist1;i++)
+    {
+        if (hist_lower2[i].val<maxlower.val)
+        {
+            count++;
+        }
+    }
+}
+else
 {
-	PG_RETURN_FLOAT8(0.005);
+    maxlower.val=hist_lower2[0].val;
+    for (i=0;i<nhist;i++)
+    {
+        if (hist_lower1[i].val<maxlower.val)
+        {
+            count++;
+        }
+    }
+}
+
+if (hist_upper1[nhist-1].val<=hist_upper2[nhist1-1].val){
+    minupper.val=hist_upper1[nhist-1].val;
+
+    for (i=0;i<nhist1;i++)
+    {
+        if (hist_upper2[i].val>minupper.val)
+        {
+            count++;
+        }
+    }
+
+}
+else
+{
+    minupper.val=hist_upper2[nhist1-1].val;
+    for (i=0;i<nhist;i++)
+    {
+        if (hist_upper1[i].val>minupper.val)
+        {
+            count++;
+        }
+    }
+}
+
+printf("%d",count);
+selec=((nhist+nhist1)-count)/(nhist+nhist1);
+
+/*printf("Value of d = %lf\n",selec);*/
+
+	
+    fflush(stdout);
+
+    pfree(hist_lower1);
+    pfree(hist_upper1);
+
+    free_attstatsslot(&sslot1);
+
+    pfree(hist_lower2);
+    pfree(hist_upper2);
+
+    free_attstatsslot(&sslot2);
+
+    ReleaseVariableStats(vardata1);
+    ReleaseVariableStats(vardata2);
+
+    CLAMP_PROBABILITY(selec);
+    PG_RETURN_FLOAT8((float8) selec);
 }
 
 /*
  *	positionsel
  *
- * How likely is a box to be strictly left of (right of, above, below)
+ * yHow likely is a box to be strictly left of (right of, above, below)
  * a given box?
  */
 
@@ -94,3 +286,10 @@ contjoinsel(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_FLOAT8(0.001);
 }
+/*
+ * Range Overlaps Join Selectivity.
+ */
+
+
+
+
